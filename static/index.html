@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Multi-Agent Productivity Assistant</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}
+  header{background:linear-gradient(135deg,#1a1f2e,#2d1b69);padding:16px 24px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2d3748}
+  header h1{font-size:1.3rem;font-weight:700;color:#a78bfa}
+  header .badge{background:#7c3aed;color:#fff;font-size:.7rem;padding:2px 8px;border-radius:99px;font-weight:600}
+  .layout{display:grid;grid-template-columns:1fr 340px;height:calc(100vh - 57px)}
+
+  /* ── Chat panel ── */
+  .chat{display:flex;flex-direction:column;border-right:1px solid #2d3748}
+  .messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+  .msg{max-width:78%;padding:10px 14px;border-radius:12px;font-size:.88rem;line-height:1.5;word-break:break-word}
+  .msg.user{align-self:flex-end;background:#7c3aed;color:#fff;border-bottom-right-radius:4px}
+  .msg.assistant{align-self:flex-start;background:#1e2235;border:1px solid #2d3748;border-bottom-left-radius:4px}
+  .msg.assistant .final{color:#a78bfa;font-weight:600;white-space:pre-wrap}
+
+  /* ── Agent trace ── */
+  .trace{background:#0d1117;border-top:1px solid #2d3748;height:160px;overflow-y:auto;padding:8px 12px;font-size:.75rem;font-family:'Fira Code',monospace}
+  .trace-line{padding:2px 0;display:flex;gap:6px;align-items:flex-start}
+  .trace-line .badge{padding:1px 6px;border-radius:4px;font-size:.65rem;font-weight:700;white-space:nowrap;flex-shrink:0}
+  .badge.orchestrator{background:#4f46e5;color:#fff}
+  .badge.task_agent{background:#059669;color:#fff}
+  .badge.calendar_agent{background:#d97706;color:#fff}
+  .badge.notes_agent{background:#db2777;color:#fff}
+  .trace-line .text{color:#94a3b8;flex:1}
+
+  /* ── Input ── */
+  .input-row{display:flex;gap:8px;padding:12px 16px;border-top:1px solid #2d3748;background:#13161f}
+  .input-row input{flex:1;background:#1e2235;border:1px solid #374151;border-radius:8px;padding:10px 14px;color:#e2e8f0;font-size:.9rem;outline:none}
+  .input-row input:focus{border-color:#7c3aed}
+  .input-row button{background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-weight:600;cursor:pointer;font-size:.88rem;transition:background .2s}
+  .input-row button:hover{background:#6d28d9}
+  .input-row button:disabled{background:#374151;cursor:not-allowed}
+  .briefing-btn{background:#1e2235;border:1px solid #374151;color:#a78bfa;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:.82rem;font-weight:600;white-space:nowrap;transition:background .2s}
+  .briefing-btn:hover{background:#2d3748}
+
+  /* ── Right panel ── */
+  .sidebar{overflow-y:auto;background:#13161f}
+  .panel{border-bottom:1px solid #2d3748;padding:14px}
+  .panel h2{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+  .panel h2 button{background:#1e2235;border:1px solid #374151;color:#94a3b8;border-radius:6px;padding:2px 8px;font-size:.7rem;cursor:pointer}
+  .panel h2 button:hover{color:#e2e8f0}
+  .item{background:#1e2235;border:1px solid #2d3748;border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:.8rem}
+  .item .name{font-weight:500;color:#e2e8f0}
+  .item .meta{color:#64748b;font-size:.72rem;margin-top:2px}
+  .pill{display:inline-block;padding:1px 6px;border-radius:99px;font-size:.65rem;font-weight:700;margin-right:4px}
+  .pill.high{background:#7f1d1d;color:#fca5a5}
+  .pill.medium{background:#78350f;color:#fcd34d}
+  .pill.low{background:#052e16;color:#86efac}
+  .pill.done{background:#1e3a5f;color:#93c5fd;text-decoration:line-through}
+  .pill.pending{background:#1c1917;color:#a8a29e}
+  .empty{color:#475569;font-size:.78rem;text-align:center;padding:8px 0}
+
+  /* ── Example prompts ── */
+  .examples{padding:8px 16px 0;display:flex;flex-wrap:wrap;gap:6px}
+  .chip{background:#1e2235;border:1px solid #374151;color:#94a3b8;border-radius:99px;padding:4px 12px;font-size:.75rem;cursor:pointer;transition:all .15s}
+  .chip:hover{border-color:#7c3aed;color:#a78bfa}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid #4f46e5;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<header>
+  <div style="width:32px;height:32px;background:linear-gradient(135deg,#7c3aed,#db2777);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem">🤖</div>
+  <h1>Multi-Agent Productivity Assistant</h1>
+  <span class="badge">Hackathon Demo</span>
+  <span style="margin-left:auto;font-size:.75rem;color:#64748b">powered by Claude claude-sonnet-4-6</span>
+</header>
+
+<div class="layout">
+  <!-- Chat -->
+  <div class="chat">
+    <div class="examples" id="examples">
+      <span class="chip" onclick="sendExample(this)">Schedule standup tomorrow 9am + create prep task</span>
+      <span class="chip" onclick="sendExample(this)">What tasks do I have pending?</span>
+      <span class="chip" onclick="sendExample(this)">Save a note about project ideas</span>
+      <span class="chip" onclick="sendExample(this)">Mark task 1 as done</span>
+      <span class="chip" onclick="sendExample(this)">What's on my calendar today?</span>
+    </div>
+    <div class="messages" id="messages">
+      <div class="msg assistant">
+        <div class="final">Hi! I'm your AI productivity assistant.<br>I can manage tasks, schedule events, and save notes — all from natural language.<br><br>Try an example above or type anything below.</div>
+      </div>
+    </div>
+    <div class="trace" id="trace">
+      <div class="trace-line"><span class="badge orchestrator">system</span><span class="text">Agent trace will appear here in real time...</span></div>
+    </div>
+    <div class="input-row">
+      <input id="inp" placeholder="Ask me anything… e.g. 'Schedule a team meeting Friday 2pm'" onkeydown="if(event.key==='Enter')send()"/>
+      <button class="briefing-btn" onclick="briefing()" id="briefBtn">📋 Daily Briefing</button>
+      <button onclick="send()" id="sendBtn">Send</button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="panel">
+      <h2>Tasks <button onclick="refreshAll()">↻</button></h2>
+      <div id="tasks-list"><div class="empty">Loading…</div></div>
+    </div>
+    <div class="panel">
+      <h2>Calendar Events</h2>
+      <div id="events-list"><div class="empty">Loading…</div></div>
+    </div>
+    <div class="panel">
+      <h2>Notes</h2>
+      <div id="notes-list"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const USER_ID = "demo";
+const BASE = "";
+
+async function refreshAll() {
+  await Promise.all([loadTasks(), loadEvents(), loadNotes()]);
+}
+
+async function loadTasks() {
+  const r = await fetch(`${BASE}/tasks?user_id=${USER_ID}`);
+  const items = await r.json();
+  const el = document.getElementById("tasks-list");
+  if (!items.length) { el.innerHTML = '<div class="empty">No tasks yet</div>'; return; }
+  el.innerHTML = items.map(t => `
+    <div class="item">
+      <div class="name">${esc(t.name)}</div>
+      <div class="meta">
+        <span class="pill ${t.priority}">${t.priority}</span>
+        <span class="pill ${t.status}">${t.status}</span>
+        ${t.due_date ? `<span style="color:#94a3b8">due ${esc(t.due_date)}</span>` : ""}
+        <span style="float:right;color:#374151">#${t.id}</span>
+      </div>
+    </div>`).join("");
+}
+
+async function loadEvents() {
+  const r = await fetch(`${BASE}/events?user_id=${USER_ID}`);
+  const items = await r.json();
+  const el = document.getElementById("events-list");
+  if (!items.length) { el.innerHTML = '<div class="empty">No events yet</div>'; return; }
+  el.innerHTML = items.map(e => `
+    <div class="item">
+      <div class="name">${esc(e.name)}</div>
+      <div class="meta">${esc(e.start_time)} · ${e.duration_minutes}min <span style="float:right;color:#374151">#${e.id}</span></div>
+    </div>`).join("");
+}
+
+async function loadNotes() {
+  const r = await fetch(`${BASE}/notes?user_id=${USER_ID}`);
+  const items = await r.json();
+  const el = document.getElementById("notes-list");
+  if (!items.length) { el.innerHTML = '<div class="empty">No notes yet</div>'; return; }
+  el.innerHTML = items.map(n => `
+    <div class="item">
+      <div class="name">${esc(n.title)}</div>
+      <div class="meta">${n.tags ? `<span style="color:#7c3aed">${esc(n.tags)}</span> · ` : ""}${esc(n.body).slice(0,60)}… <span style="float:right;color:#374151">#${n.id}</span></div>
+    </div>`).join("");
+}
+
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function appendMessage(role, html) {
+  const el = document.getElementById("messages");
+  const div = document.createElement("div");
+  div.className = `msg ${role}`;
+  div.innerHTML = html;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  return div;
+}
+
+function addTrace(agent, text) {
+  const el = document.getElementById("trace");
+  const line = document.createElement("div");
+  line.className = "trace-line";
+  line.innerHTML = `<span class="badge ${agent}">${agent}</span><span class="text">${esc(text)}</span>`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function streamRequest(url) {
+  const sendBtn = document.getElementById("sendBtn");
+  const briefBtn = document.getElementById("briefBtn");
+  sendBtn.disabled = true; briefBtn.disabled = true;
+
+  const traceEl = document.getElementById("trace");
+  traceEl.innerHTML = "";
+
+  const assistantDiv = appendMessage("assistant", '<span class="spinner"></span><span style="color:#64748b">Agents working…</span>');
+  let finalText = "";
+
+  const evtSource = new EventSource(url);
+  evtSource.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    addTrace(data.agent, data.msg);
+    // Collect the last orchestrator text block as the summary
+    if (data.agent === "orchestrator" && !data.msg.startsWith("Hop ") && !data.msg.startsWith("Processing") && data.msg !== "✓ Done.") {
+      finalText = data.msg;
+    }
+    if (data.msg === "✓ Done.") {
+      evtSource.close();
+      assistantDiv.innerHTML = `<div class="final">${esc(finalText || "Done! Your data has been updated.").replace(/\n/g,"<br>")}</div>`;
+      sendBtn.disabled = false; briefBtn.disabled = false;
+      refreshAll();
+    }
+  };
+  evtSource.onerror = () => {
+    evtSource.close();
+    assistantDiv.innerHTML = '<div class="final" style="color:#f87171">Error connecting to server. Is the backend running?</div>';
+    sendBtn.disabled = false; briefBtn.disabled = false;
+  };
+}
+
+async function send() {
+  const inp = document.getElementById("inp");
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = "";
+  appendMessage("user", esc(msg));
+  const url = `${BASE}/stream?message=${encodeURIComponent(msg)}&user_id=${USER_ID}`;
+  await streamRequest(url);
+}
+
+async function briefing() {
+  appendMessage("user", "📋 Daily Briefing");
+  const url = `${BASE}/daily-briefing?user_id=${USER_ID}`;
+  await streamRequest(url);
+}
+
+function sendExample(el) {
+  document.getElementById("inp").value = el.textContent;
+  send();
+}
+
+// Init
+refreshAll();
+</script>
+</body>
+</html>

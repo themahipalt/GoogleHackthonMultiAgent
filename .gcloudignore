@@ -1,0 +1,13 @@
+.gcloudignore
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+.env
+service-account.json
+auth/client_secrets.json
+tokens/
+*.db
+.DS_Store
+README.md

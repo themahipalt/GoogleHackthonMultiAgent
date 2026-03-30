@@ -1,0 +1,13 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-dotenv==1.0.1
+
+# ── Google AI ──────────────────────────────────────────────────────────────────
+google-genai>=1.0.0                 # Gemini 2.0 Flash LLM (new unified SDK)
+
+# ── Google Cloud ───────────────────────────────────────────────────────────────
+google-cloud-firestore>=2.19.0      # Firestore DB
+google-api-python-client>=2.155.0   # Calendar + Tasks REST APIs
+google-auth>=2.38.0                 # Google credentials
+google-auth-httplib2>=0.2.0         # HTTP transport for Google APIs
+google-auth-oauthlib>=1.2.0         # OAuth 2.0 helpers
