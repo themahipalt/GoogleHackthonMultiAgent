@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Architecture — Multi-Agent Productivity Assistant</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh;padding:32px 24px}
+  h1{font-size:1.4rem;font-weight:700;color:#a78bfa;margin-bottom:4px}
+  .subtitle{font-size:.82rem;color:#64748b;margin-bottom:32px}
+
+  /* ── Grid ── */
+  .arch{display:flex;flex-direction:column;gap:0;max-width:1100px;margin:0 auto}
+
+  /* ── Layer ── */
+  .layer{position:relative;padding:20px 24px;border-left:3px solid transparent}
+  .layer-label{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;opacity:.6}
+  .layer.frontend {border-color:#7c3aed;background:linear-gradient(90deg,rgba(124,58,237,.07),transparent)}
+  .layer.transport {border-color:#0ea5e9;background:linear-gradient(90deg,rgba(14,165,233,.07),transparent)}
+  .layer.api       {border-color:#10b981;background:linear-gradient(90deg,rgba(16,185,129,.07),transparent)}
+  .layer.orch      {border-color:#f59e0b;background:linear-gradient(90deg,rgba(245,158,11,.07),transparent)}
+  .layer.tools     {border-color:#ec4899;background:linear-gradient(90deg,rgba(236,72,153,.07),transparent)}
+  .layer.storage   {border-color:#64748b;background:linear-gradient(90deg,rgba(100,116,139,.07),transparent)}
+
+  /* ── Arrow connector ── */
+  .arrow{display:flex;align-items:center;justify-content:center;height:28px;gap:8px;font-size:.72rem;color:#475569}
+  .arrow::before,.arrow::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,#2d3748,transparent)}
+
+  /* ── Boxes ── */
+  .boxes{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}
+  .box{background:#1e2235;border:1px solid #2d3748;border-radius:10px;padding:12px 14px;min-width:160px;flex:1}
+  .box.highlight{border-color:#7c3aed}
+  .box h3{font-size:.8rem;font-weight:700;margin-bottom:4px}
+  .box p{font-size:.72rem;color:#64748b;line-height:1.5}
+  .box .file{font-size:.65rem;color:#374151;font-family:'Fira Code',monospace;margin-top:6px;background:#0d1117;padding:2px 6px;border-radius:4px;display:inline-block}
+  .box ul{margin-top:4px;padding-left:14px}
+  .box ul li{font-size:.72rem;color:#94a3b8;line-height:1.6}
+  .badge{display:inline-block;padding:1px 7px;border-radius:99px;font-size:.62rem;font-weight:700;margin-right:4px;margin-top:2px}
+  .b-purple{background:#4c1d95;color:#c4b5fd}
+  .b-blue  {background:#0c4a6e;color:#7dd3fc}
+  .b-green {background:#064e3b;color:#6ee7b7}
+  .b-yellow{background:#78350f;color:#fcd34d}
+  .b-pink  {background:#831843;color:#f9a8d4}
+  .b-gray  {background:#1e293b;color:#94a3b8}
+
+  /* ── Flow detail ── */
+  .flow{background:#13161f;border:1px solid #2d3748;border-radius:10px;padding:16px;margin-top:28px;max-width:1100px;margin-left:auto;margin-right:auto}
+  .flow h2{font-size:.85rem;font-weight:700;color:#a78bfa;margin-bottom:14px}
+  .step{display:flex;gap:12px;margin-bottom:10px;align-items:flex-start}
+  .step-num{background:#4f46e5;color:#fff;border-radius:50%;width:20px;height:20px;font-size:.65rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+  .step-body{font-size:.78rem;color:#94a3b8;line-height:1.6}
+  .step-body strong{color:#e2e8f0}
+  .code{font-family:'Fira Code',monospace;background:#0d1117;padding:1px 5px;border-radius:3px;font-size:.72rem;color:#a78bfa}
+
+  /* ── Tool table ── */
+  .tool-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:28px;max-width:1100px;margin-left:auto;margin-right:auto}
+  .tool-card{background:#13161f;border:1px solid #2d3748;border-radius:10px;padding:14px}
+  .tool-card h3{font-size:.78rem;font-weight:700;margin-bottom:8px}
+  .tool-card.task    h3{color:#6ee7b7}
+  .tool-card.calendar h3{color:#fcd34d}
+  .tool-card.notes   h3{color:#f9a8d4}
+  .tool-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e2235;font-size:.72rem}
+  .tool-row:last-child{border-bottom:none}
+  .tool-row .name{color:#e2e8f0;font-family:'Fira Code',monospace}
+  .tool-row .desc{color:#64748b;text-align:right}
+
+  /* ── File tree ── */
+  .file-tree{background:#13161f;border:1px solid #2d3748;border-radius:10px;padding:16px 20px;margin-top:28px;max-width:1100px;margin-left:auto;margin-right:auto;font-family:'Fira Code',monospace;font-size:.75rem;line-height:1.9}
+  .file-tree h2{font-family:'Segoe UI',system-ui,sans-serif;font-size:.85rem;font-weight:700;color:#a78bfa;margin-bottom:12px}
+  .dir{color:#7dd3fc}
+  .file-name{color:#94a3b8}
+  .file-note{color:#374151;font-size:.68rem;margin-left:8px}
+  .indent1{padding-left:16px}
+  .indent2{padding-left:32px}
+  .indent3{padding-left:48px}
+</style>
+</head>
+<body>
+
+<h1>Multi-Agent Productivity Assistant — Internal Architecture</h1>
+<p class="subtitle">Gemini 2.5 Flash · Cloud Firestore · Google Calendar API · Google Tasks API · FastAPI · SSE</p>
+
+<!-- ── Layer diagram ── -->
+<div class="arch">
+
+  <!-- LAYER 1: Browser -->
+  <div class="layer frontend">
+    <div class="layer-label">Layer 1 — Frontend / Browser</div>
+    <div class="boxes">
+      <div class="box highlight">
+        <h3>Web UI</h3>
+        <p>Single-page app served by FastAPI</p>
+        <ul>
+          <li>Chat input + message history</li>
+          <li>Real-time agent trace panel</li>
+          <li>Tasks / Events / Notes sidebar</li>
+          <li>Example chips + Daily Briefing btn</li>
+        </ul>
+        <span class="file">static/index.html</span>
+      </div>
+      <div class="box">
+        <h3>EventSource (SSE client)</h3>
+        <p>Connects to <span class="code">/stream</span> and receives JSON events as they are yielded by the orchestrator</p>
+        <ul>
+          <li>Renders trace lines in real time</li>
+          <li>Extracts final text summary</li>
+          <li>Triggers sidebar refresh on done</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>REST Fetch calls</h3>
+        <p>Sidebar auto-loads data from CRUD endpoints on init and after each agent run</p>
+        <ul>
+          <li><span class="code">GET /tasks</span></li>
+          <li><span class="code">GET /events</span></li>
+          <li><span class="code">GET /notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">HTTP / Server-Sent Events</div>
+
+  <!-- LAYER 2: Transport -->
+  <div class="layer transport">
+    <div class="layer-label">Layer 2 — Transport &amp; Entry Points</div>
+    <div class="boxes">
+      <div class="box">
+        <h3>GET /stream</h3>
+        <p>SSE stream — real-time agent trace</p>
+        <span class="badge b-blue">StreamingResponse</span>
+        <span class="file">api/routes/agent.py</span>
+      </div>
+      <div class="box">
+        <h3>GET /daily-briefing</h3>
+        <p>SSE stream — pending tasks + today's events in one shot</p>
+        <span class="badge b-blue">StreamingResponse</span>
+        <span class="file">api/routes/agent.py</span>
+      </div>
+      <div class="box">
+        <h3>POST /run</h3>
+        <p>Non-streaming — collects all SSE events, returns full JSON log</p>
+        <span class="badge b-gray">JSON</span>
+        <span class="file">api/routes/agent.py</span>
+      </div>
+      <div class="box">
+        <h3>CRUD Routes</h3>
+        <p>Direct read access without the AI layer</p>
+        <ul>
+          <li><span class="code">GET /tasks</span></li>
+          <li><span class="code">GET /events</span></li>
+          <li><span class="code">GET /notes</span></li>
+          <li><span class="code">GET /logs</span></li>
+          <li><span class="code">GET /health</span></li>
+        </ul>
+        <span class="file">api/routes/tasks|events|notes|logs.py</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">async generator (yield SSE chunks)</div>
+
+  <!-- LAYER 3: FastAPI App -->
+  <div class="layer api">
+    <div class="layer-label">Layer 3 — FastAPI Application</div>
+    <div class="boxes">
+      <div class="box">
+        <h3>FastAPI App</h3>
+        <p>ASGI app, CORS middleware, router registration</p>
+        <span class="file">main.py</span>
+      </div>
+      <div class="box">
+        <h3>API Schemas</h3>
+        <p>Pydantic request/response models for validation</p>
+        <span class="badge b-green">RunRequest</span>
+        <span class="file">api/schemas.py</span>
+      </div>
+      <div class="box">
+        <h3>CORS Middleware</h3>
+        <p>Allows all origins for hackathon prototype. Tighten for production.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">run_orchestrator(message, user_id)</div>
+
+  <!-- LAYER 4: Orchestrator -->
+  <div class="layer orch">
+    <div class="layer-label">Layer 4 — Orchestrator Agent (Agentic Loop)</div>
+    <div class="boxes">
+      <div class="box highlight" style="flex:2;min-width:300px">
+        <h3>Orchestrator — Gemini 2.5 Flash</h3>
+        <p>Agentic loop: sends user message → executes tool calls → feeds results back → repeats until Gemini produces a text-only response (no more tool calls)</p>
+        <ul>
+          <li>Max 8 hops (prevents infinite loops)</li>
+          <li>Parallel tool calls in a single hop</li>
+          <li>Yields SSE events at each step</li>
+          <li>Persists tool call logs to Firestore</li>
+        </ul>
+        <span class="badge b-yellow">gemini-2.5-flash</span>
+        <span class="file">agents/orchestrator.py</span>
+      </div>
+      <div class="box">
+        <h3>System Prompt</h3>
+        <p>Instructs Gemini to:</p>
+        <ul>
+          <li>Always call tools (never fabricate)</li>
+          <li>Batch independent calls</li>
+          <li>Handle multi-step workflows</li>
+          <li>Return a concise summary</li>
+        </ul>
+        <p style="margin-top:6px;font-size:.7rem;color:#475569">Includes today's date for relative date resolution</p>
+      </div>
+      <div class="box">
+        <h3>SSE Payload Format</h3>
+        <p>Every yield is a JSON event:</p>
+        <pre style="font-size:.68rem;color:#94a3b8;margin-top:6px;background:#0d1117;padding:8px;border-radius:6px;overflow:auto">{
+  "agent": "calendar_agent",
+  "msg":   "→ calendar_create_event(...)",
+  "ts":    1743436800.0
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">dispatch_tool(name, args, user_id)</div>
+
+  <!-- LAYER 5: Tools -->
+  <div class="layer tools">
+    <div class="layer-label">Layer 5 — Tool Registry &amp; Sub-Agents</div>
+    <div class="boxes">
+      <div class="box">
+        <h3>Tool Registry</h3>
+        <p>Merges schemas + handlers from all 3 domain modules. Converts JSON Schema → <span class="code">genai.FunctionDeclaration</span></p>
+        <span class="badge b-pink">11 tools total</span>
+        <span class="file">tools/__init__.py</span>
+      </div>
+      <div class="box">
+        <h3 style="color:#6ee7b7">Task Agent</h3>
+        <p>Dual backend: Google Tasks API (if OAuth token) or Firestore fallback</p>
+        <span class="badge b-green">5 tools</span>
+        <span class="file">tools/task_tools.py</span>
+      </div>
+      <div class="box">
+        <h3 style="color:#fcd34d">Calendar Agent</h3>
+        <p>Dual backend: Google Calendar API (if service account) or Firestore fallback. Resolves relative dates (today/tomorrow/weekday)</p>
+        <span class="badge b-yellow">3 tools</span>
+        <span class="file">tools/calendar_tools.py</span>
+      </div>
+      <div class="box">
+        <h3 style="color:#f9a8d4">Notes Agent</h3>
+        <p>Firestore-only. Full-text keyword search done in Python (no composite index needed)</p>
+        <span class="badge b-pink">3 tools</span>
+        <span class="file">tools/notes_tools.py</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">Firestore SDK · Google APIs</div>
+
+  <!-- LAYER 6: Storage -->
+  <div class="layer storage">
+    <div class="layer-label">Layer 6 — Storage &amp; External APIs</div>
+    <div class="boxes">
+      <div class="box">
+        <h3>Cloud Firestore</h3>
+        <p>Primary document store for all data. Also acts as a mirror when Google APIs are active.</p>
+        <ul>
+          <li><span class="code">tasks</span> collection</li>
+          <li><span class="code">events</span> collection</li>
+          <li><span class="code">notes</span> collection</li>
+          <li><span class="code">agent_logs</span> collection</li>
+        </ul>
+        <span class="file">db/client.py</span>
+      </div>
+      <div class="box">
+        <h3>Google Tasks API</h3>
+        <p>Real Google Tasks integration. Requires OAuth 2.0 token from <span class="code">auth/oauth_setup.py</span></p>
+        <span class="badge b-green">Optional</span>
+        <p style="margin-top:6px;font-size:.7rem;color:#475569">Mirrors writes back to Firestore for unified querying</p>
+      </div>
+      <div class="box">
+        <h3>Google Calendar API</h3>
+        <p>Real Google Calendar integration. Requires service account with calendar share.</p>
+        <span class="badge b-yellow">Optional</span>
+        <p style="margin-top:6px;font-size:.7rem;color:#475569">Mirrors writes back to Firestore for unified querying</p>
+      </div>
+      <div class="box">
+        <h3>Auth Layer</h3>
+        <p>Handles both credential strategies at runtime</p>
+        <ul>
+          <li>Service account → <span class="code">GOOGLE_APPLICATION_CREDENTIALS</span></li>
+          <li>ADC → <span class="code">gcloud auth application-default login</span></li>
+          <li>OAuth 2.0 → <span class="code">tokens/tasks_token.json</span></li>
+        </ul>
+        <span class="file">auth/google_auth.py</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Request flow ── -->
+<div class="flow">
+  <h2>Request Flow — "Schedule standup tomorrow 9am + create prep task"</h2>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>Browser</strong> sends <span class="code">GET /stream?message=...&amp;user_id=demo</span> via <span class="code">EventSource</span>. FastAPI returns a <span class="code">StreamingResponse</span> (text/event-stream).
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <strong>Orchestrator</strong> yields SSE: <span class="code">{"agent":"orchestrator","msg":"Processing: ..."}</span> immediately so the UI shows activity.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <strong>Gemini 2.5 Flash</strong> receives the message + all 11 tool schemas. It responds with two parallel <span class="code">function_call</span> parts: <span class="code">calendar_create_event</span> and <span class="code">task_create</span>.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <strong>Orchestrator loop (Hop 1)</strong> iterates the function_calls, yields a trace line per call, dispatches each to the tool registry, and logs to Firestore's <span class="code">agent_logs</span> collection.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <strong>Calendar Agent</strong> resolves "tomorrow" → <span class="code">2026-04-01</span>, calls Firestore (or Google Calendar API if configured), gets back <span class="code">{"created":true,"event_id":"..."}</span>.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <strong>Task Agent</strong> creates the prep task in Firestore (or Google Tasks API), returns <span class="code">{"created":true,"task_id":"..."}</span>.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">7</div>
+    <div class="step-body">
+      Both results are bundled into a single <span class="code">chat.send_message(response_parts)</span> call. Gemini sees both outcomes and produces a final text summary (no more function_calls → loop breaks).
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">8</div>
+    <div class="step-body">
+      <strong>Orchestrator</strong> yields the summary text and <span class="code">✓ Done.</span>. Browser closes the EventSource, renders the response, and refreshes the sidebar via <span class="code">GET /tasks</span> and <span class="code">GET /events</span>.
+    </div>
+  </div>
+</div>
+
+<!-- ── Tool table ── -->
+<div class="tool-grid">
+  <div class="tool-card task">
+    <h3>Task Agent — 5 Tools</h3>
+    <div class="tool-row"><span class="name">task_create</span><span class="desc">name, priority, due_date</span></div>
+    <div class="tool-row"><span class="name">task_list</span><span class="desc">filter by status</span></div>
+    <div class="tool-row"><span class="name">task_update</span><span class="desc">status / priority / rename</span></div>
+    <div class="tool-row"><span class="name">task_delete</span><span class="desc">by task_id</span></div>
+    <div class="tool-row"><span class="name">task_search</span><span class="desc">keyword in name</span></div>
+  </div>
+  <div class="tool-card calendar">
+    <h3>Calendar Agent — 3 Tools</h3>
+    <div class="tool-row"><span class="name">calendar_create_event</span><span class="desc">name, start_time, duration</span></div>
+    <div class="tool-row"><span class="name">calendar_list_events</span><span class="desc">filter by day</span></div>
+    <div class="tool-row"><span class="name">calendar_delete_event</span><span class="desc">by event_id</span></div>
+  </div>
+  <div class="tool-card notes">
+    <h3>Notes Agent — 3 Tools</h3>
+    <div class="tool-row"><span class="name">notes_create</span><span class="desc">title, body, tags</span></div>
+    <div class="tool-row"><span class="name">notes_search</span><span class="desc">keyword across title/body/tags</span></div>
+    <div class="tool-row"><span class="name">notes_delete</span><span class="desc">by note_id</span></div>
+  </div>
+</div>
+
+<!-- ── File tree ── -->
+<div class="file-tree">
+  <h2>Project File Structure</h2>
+  <div><span class="dir">Prototype/</span></div>
+  <div class="indent1"><span class="file-name">main.py</span><span class="file-note">FastAPI app, router registration, CORS</span></div>
+  <div class="indent1"><span class="dir">agents/</span></div>
+  <div class="indent2"><span class="file-name">orchestrator.py</span><span class="file-note">Gemini agentic loop, SSE yield, hop limit</span></div>
+  <div class="indent1"><span class="dir">tools/</span></div>
+  <div class="indent2"><span class="file-name">__init__.py</span><span class="file-note">Schema merger, JSON→genai converter, dispatcher</span></div>
+  <div class="indent2"><span class="file-name">task_tools.py</span><span class="file-note">5 tools, dual backend (GTasks + Firestore)</span></div>
+  <div class="indent2"><span class="file-name">calendar_tools.py</span><span class="file-note">3 tools, dual backend (GCal + Firestore), date resolver</span></div>
+  <div class="indent2"><span class="file-name">notes_tools.py</span><span class="file-note">3 tools, Firestore only</span></div>
+  <div class="indent1"><span class="dir">api/</span></div>
+  <div class="indent2"><span class="file-name">schemas.py</span><span class="file-note">Pydantic models (RunRequest)</span></div>
+  <div class="indent2"><span class="dir">routes/</span></div>
+  <div class="indent3"><span class="file-name">agent.py</span><span class="file-note">/stream, /run, /daily-briefing</span></div>
+  <div class="indent3"><span class="file-name">tasks.py</span><span class="file-note">GET /tasks</span></div>
+  <div class="indent3"><span class="file-name">events.py</span><span class="file-note">GET /events</span></div>
+  <div class="indent3"><span class="file-name">notes.py</span><span class="file-note">GET /notes</span></div>
+  <div class="indent3"><span class="file-name">logs.py</span><span class="file-note">GET /logs</span></div>
+  <div class="indent1"><span class="dir">db/</span></div>
+  <div class="indent2"><span class="file-name">client.py</span><span class="file-note">Singleton Firestore client, collection constants</span></div>
+  <div class="indent1"><span class="dir">auth/</span></div>
+  <div class="indent2"><span class="file-name">google_auth.py</span><span class="file-note">get_calendar_service(), get_tasks_service()</span></div>
+  <div class="indent2"><span class="file-name">oauth_setup.py</span><span class="file-note">One-time script to generate tasks_token.json</span></div>
+  <div class="indent1"><span class="dir">static/</span></div>
+  <div class="indent2"><span class="file-name">index.html</span><span class="file-note">Single-page UI with SSE client</span></div>
+  <div class="indent2"><span class="file-name">architecture.html</span><span class="file-note">This diagram</span></div>
+  <div class="indent1"><span class="file-name">.env</span><span class="file-note">GOOGLE_API_KEY, GOOGLE_CLOUD_PROJECT, GOOGLE_APPLICATION_CREDENTIALS</span></div>
+  <div class="indent1"><span class="file-name">Dockerfile</span><span class="file-note">Cloud Run container</span></div>
+  <div class="indent1"><span class="file-name">cloudbuild.yaml</span><span class="file-note">CI/CD pipeline</span></div>
+</div>
+
+</body>
+</html>

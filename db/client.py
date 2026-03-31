@@ -8,6 +8,7 @@ Collections used:
   agent_logs  — orchestrator tool-call audit trail
 """
 import os
+os.environ.setdefault("GRPC_DNS_RESOLVER", "native")  # fix c-ares DNS failure on macOS
 from google.cloud import firestore
 
 _client: firestore.Client | None = None

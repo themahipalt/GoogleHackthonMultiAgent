@@ -81,8 +81,28 @@ async def run(message: str, user_id: str) -> AsyncGenerator[str, None]:
         yield _sse("orchestrator", f"Hop {hop + 1} — model={MODEL}")
 
         # ── Collect text and function_call parts ──────────────────────────────
+        candidates = response.candidates or []
+        if not candidates:
+            yield _sse("orchestrator", "No candidates in response")
+            break
+        candidate = candidates[0]
+        content = candidate.content
+        parts = content.parts if content else None
+        import sys
+        print(f"[DEBUG hop={hop}] finish={candidate.finish_reason} content={content} parts={parts}", file=sys.stderr, flush=True)
+        if not parts:
+            # Gemini 2.5 Flash thinking model may return empty parts on final STOP
+            # Try response.text as fallback
+            try:
+                text = response.text
+                if text:
+                    yield _sse("orchestrator", text)
+            except Exception:
+                yield _sse("orchestrator", f"Empty response (finish_reason={candidate.finish_reason})")
+            break
+
         function_calls = []
-        for part in response.candidates[0].content.parts:
+        for part in parts:
             if part.text:
                 yield _sse("orchestrator", part.text)
             if part.function_call:
