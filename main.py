@@ -49,7 +49,7 @@ app.include_router(logs.router)
 def health():
     return {
         "status":  "ok",
-        "model":   "gemini-2.0-flash",
+        "model":   "gemini-2.5-flash",
         "db":      "google-cloud-firestore",
         "time":    datetime.now(timezone.utc).isoformat(),
     }

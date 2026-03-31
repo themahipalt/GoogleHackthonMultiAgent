@@ -24,7 +24,7 @@ from tools import GEMINI_TOOLS, dispatch_tool
 
 load_dotenv()
 
-MODEL    = "gemini-2.0-flash"
+MODEL    = "gemini-2.5-flash"
 # Safety cap: prevents infinite tool-call loops if the model never stops
 # calling tools. 8 hops allows deeply nested multi-step workflows while
 # bounding runaway API costs.
