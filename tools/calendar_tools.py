@@ -125,7 +125,9 @@ def _gcal_list(svc, inp: dict) -> dict:
     date_prefix = _resolve_date(inp.get("day", ""))
     now = datetime.now(timezone.utc)
 
-    # time_min = start of the target day (or now for "all")
+    # When a specific day is requested, bound the query to [00:00, 23:59] on
+    # that day. When no day is given, show everything from now onward (no upper
+    # bound) so users see all upcoming events.
     if date_prefix:
         time_min = f"{date_prefix}T00:00:00Z"
         time_max = f"{date_prefix}T23:59:59Z"
@@ -137,6 +139,8 @@ def _gcal_list(svc, inp: dict) -> dict:
         calendarId=CALENDAR_ID,
         timeMin=time_min,
         maxResults=20,
+        # singleEvents=True expands recurring events into individual instances
+        # so each occurrence appears as a separate item in the results.
         singleEvents=True,
         orderBy="startTime",
     )
@@ -216,6 +220,10 @@ def _resolve_date(day_str: str) -> str | None:
     day_map = {"monday": 0, "tuesday": 1, "wednesday": 2,
                "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
     if s in day_map:
+        # Compute days until the next occurrence of the named weekday.
+        # `% 7` wraps negative differences and gives 0 when today matches;
+        # `or 7` replaces 0 with 7 so "friday" on a Friday means next Friday,
+        # not today (avoids showing a potentially already-past day).
         diff = (day_map[s] - today.weekday()) % 7 or 7
         return str(today + timedelta(days=diff))
     if len(s) == 10 and s[4] == "-":

@@ -25,6 +25,8 @@ _CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 _TASKS_SCOPES    = ["https://www.googleapis.com/auth/tasks"]
 
 
+# lru_cache means the service object is built once and reused across all
+# requests. The service account credentials don't expire, so caching is safe.
 @lru_cache(maxsize=1)
 def get_calendar_service():
     """
@@ -57,6 +59,10 @@ def get_tasks_service():
 
     creds = Credentials.from_authorized_user_file(token_path, _TASKS_SCOPES)
 
+    # OAuth access tokens expire after ~1 hour. If the token is expired but a
+    # refresh token exists, silently renew it and persist the updated token so
+    # the next request doesn't need to re-fetch. If refresh fails (revoked),
+    # creds.valid will be False and we return None to trigger the fallback path.
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
         _save_token(creds, token_path)

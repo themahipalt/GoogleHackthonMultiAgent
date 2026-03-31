@@ -76,6 +76,9 @@ SCHEMAS = [
 
 
 # ── Handlers ──────────────────────────────────────────────────────────────────
+# Each handler checks whether a live Google Tasks OAuth token exists.
+# If yes → delegate to the Google Tasks API backend (real Google Tasks).
+# If no  → fall back to Firestore so the app still works without OAuth setup.
 
 def create(inp: dict, user_id: str) -> dict:
     svc = get_tasks_service()
@@ -106,7 +109,9 @@ def delete(inp: dict, user_id: str) -> dict:
 
 
 def search(inp: dict, user_id: str) -> dict:
-    # Search always runs against Firestore for simplicity
+    # Firestore doesn't support full-text search, so we fetch all of the user's
+    # tasks and do a case-insensitive substring match in Python. Acceptable for
+    # the small data volumes of a personal productivity tool.
     kw = inp["query"].lower()
     db = get_db()
     docs = db.collection(TASKS).where("user_id", "==", user_id).stream()
@@ -120,9 +125,11 @@ def search(inp: dict, user_id: str) -> dict:
 def _gtasks_create(svc, inp: dict, user_id: str) -> dict:
     body = {"title": inp["name"], "notes": f"priority:{inp.get('priority','medium')}"}
     if inp.get("due_date"):
+        # Google Tasks API requires a full RFC 3339 timestamp for the due field
         body["due"] = inp["due_date"] + "T00:00:00.000Z"
     task = svc.tasks().insert(tasklist="@default", body=body).execute()
-    # Mirror to Firestore for cross-query capability
+    # Mirror to Firestore so search() and the /tasks REST endpoint can query
+    # tasks regardless of which backend created them.
     _mirror_to_firestore(task["id"], inp, user_id, "pending")
     return {"created": True, "task_id": task["id"], "name": task["title"],
             "source": "google_tasks"}
@@ -197,6 +204,8 @@ def _firestore_list(inp: dict, user_id: str) -> dict:
     q = db.collection(TASKS).where("user_id", "==", user_id)
     docs = q.stream()
     tasks = [{"id": d.id, **d.to_dict()} for d in docs]
+    # Status filter is applied in Python rather than in Firestore to avoid
+    # needing a composite index on (user_id, status).
     if status_filter != "all":
         tasks = [t for t in tasks if t.get("status") == status_filter]
     tasks.sort(key=lambda t: t.get("created_at", ""), reverse=True)

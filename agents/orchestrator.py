@@ -25,6 +25,9 @@ from tools import GEMINI_TOOLS, dispatch_tool
 load_dotenv()
 
 MODEL    = "gemini-2.0-flash"
+# Safety cap: prevents infinite tool-call loops if the model never stops
+# calling tools. 8 hops allows deeply nested multi-step workflows while
+# bounding runaway API costs.
 MAX_HOPS = 8
 
 _client: genai.Client | None = None
@@ -71,6 +74,9 @@ async def run(message: str, user_id: str) -> AsyncGenerator[str, None]:
 
     response = chat.send_message(message)
 
+    # Each iteration = one round-trip to Gemini. The loop continues as long as
+    # Gemini returns function_call parts; it breaks when Gemini produces only
+    # text (meaning it has no more tools to call and is done reasoning).
     for hop in range(MAX_HOPS):
         yield _sse("orchestrator", f"Hop {hop + 1} — model={MODEL}")
 
@@ -105,6 +111,8 @@ async def run(message: str, user_id: str) -> AsyncGenerator[str, None]:
             )
 
         # ── Send all tool results back to Gemini ──────────────────────────────
+        # All function responses are sent in a single message so Gemini can
+        # reason over parallel tool results at once before the next hop.
         response = chat.send_message(response_parts)
 
     yield _sse("orchestrator", "✓ Done.")
@@ -118,6 +126,8 @@ def _sse(agent: str, msg: str) -> str:
 
 
 def _agent_label(tool_name: str) -> str:
+    # Map a tool function name to a display label so the UI can colour-code
+    # activity by sub-agent. "event" tools belong to the calendar agent.
     if "task"     in tool_name: return "task_agent"
     if "calendar" in tool_name: return "calendar_agent"
     if "event"    in tool_name: return "calendar_agent"

@@ -35,7 +35,13 @@ _TYPE_MAP = {
 
 
 def _to_schema(s: dict) -> genai_types.Schema:
-    """Recursively convert a JSON Schema dict to a genai Schema object."""
+    """Recursively convert a JSON Schema dict to a genai Schema object.
+
+    google.genai requires its own typed Schema objects rather than raw dicts.
+    This function walks the JSON Schema tree depth-first: leaf types (string,
+    integer, …) terminate immediately; object types recurse into their
+    properties so nested objects are fully converted.
+    """
     t = _TYPE_MAP.get(s.get("type", "string").lower(), genai_types.Type.STRING)
     kwargs: dict = {"type": t}
 
@@ -43,6 +49,7 @@ def _to_schema(s: dict) -> genai_types.Schema:
         kwargs["description"] = desc
     if enum := s.get("enum"):
         kwargs["enum"] = enum
+    # Recurse into nested object properties so sub-schemas are also converted
     if props := s.get("properties"):
         kwargs["properties"] = {k: _to_schema(v) for k, v in props.items()}
     if required := s.get("required"):
@@ -60,6 +67,9 @@ def _to_function_declaration(tool: dict) -> genai_types.FunctionDeclaration:
 
 
 # ── GEMINI_TOOLS — passed to client.chats.create(config=...) ─────────────────
+# All function declarations are wrapped in a single Tool object. Gemini expects
+# a list[Tool], where each Tool groups related declarations; here we use one
+# Tool for all sub-agents so the orchestrator can call any of them freely.
 GEMINI_TOOLS: list[genai_types.Tool] = [
     genai_types.Tool(
         function_declarations=[_to_function_declaration(s) for s in _ALL_SCHEMAS]

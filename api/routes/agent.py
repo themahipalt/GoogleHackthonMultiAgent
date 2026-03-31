@@ -26,6 +26,8 @@ async def run(req: RunRequest):
     """Non-streaming: run the full workflow and return the complete event log."""
     events = []
     async for chunk in run_orchestrator(req.message, req.user_id):
+        # The orchestrator yields SSE-formatted strings ("data: {...}\n\n").
+        # Strip the "data: " prefix before parsing so we get plain JSON dicts.
         if chunk.startswith("data: "):
             events.append(json.loads(chunk[6:]))
     return {"events": events}

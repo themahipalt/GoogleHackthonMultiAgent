@@ -66,6 +66,9 @@ def create(inp: dict, user_id: str) -> dict:
 
 
 def search(inp: dict, user_id: str) -> dict:
+    # Firestore has no native full-text search. We fetch all of the user's
+    # notes and do a case-insensitive substring match across title, body, and
+    # tags in Python. This is fine for personal-scale note volumes.
     kw = inp["query"].lower()
     db = get_db()
     docs = db.collection(NOTES).where("user_id", "==", user_id).stream()
