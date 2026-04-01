@@ -10,18 +10,25 @@
   header{background:linear-gradient(135deg,#1a1f2e,#2d1b69);padding:16px 24px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2d3748}
   header h1{font-size:1.3rem;font-weight:700;color:#a78bfa}
   header .badge{background:#7c3aed;color:#fff;font-size:.7rem;padding:2px 8px;border-radius:99px;font-weight:600}
-  .layout{display:grid;grid-template-columns:1fr 340px;height:calc(100vh - 57px)}
+  .layout{display:flex;height:calc(100vh - 57px);overflow:hidden}
+
+  /* ── Resize handles ── */
+  .divider-v{width:4px;cursor:col-resize;background:#2d3748;flex-shrink:0;transition:background .15s;position:relative;z-index:10}
+  .divider-v:hover,.divider-v.dragging{background:#7c3aed}
+  .divider-v::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:32px;background:inherit;border-radius:2px}
+  .divider-h{height:4px;cursor:row-resize;background:#2d3748;flex-shrink:0;transition:background .15s;position:relative;z-index:10}
+  .divider-h:hover,.divider-h.dragging{background:#7c3aed}
+  .divider-h::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:2px;width:32px;background:inherit;border-radius:2px}
 
   /* ── Chat panel ── */
-  .chat{display:flex;flex-direction:column;border-right:1px solid #2d3748}
-  .messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+  .chat{display:flex;flex-direction:column;flex:1;min-width:300px;overflow:hidden}
   .msg{max-width:78%;padding:10px 14px;border-radius:12px;font-size:.88rem;line-height:1.5;word-break:break-word}
   .msg.user{align-self:flex-end;background:#7c3aed;color:#fff;border-bottom-right-radius:4px}
   .msg.assistant{align-self:flex-start;background:#1e2235;border:1px solid #2d3748;border-bottom-left-radius:4px}
   .msg.assistant .final{color:#a78bfa;font-weight:600;white-space:pre-wrap}
 
   /* ── Agent trace ── */
-  .trace{background:#0d1117;border-top:1px solid #2d3748;height:160px;overflow-y:auto;padding:8px 12px;font-size:.75rem;font-family:'Fira Code',monospace}
+  .trace{background:#0d1117;border-top:1px solid #2d3748;height:160px;min-height:60px;overflow-y:auto;padding:8px 12px;font-size:.75rem;font-family:'Fira Code',monospace;flex-shrink:0}
   .trace-line{padding:2px 0;display:flex;gap:6px;align-items:flex-start}
   .trace-line .badge{padding:1px 6px;border-radius:4px;font-size:.65rem;font-weight:700;white-space:nowrap;flex-shrink:0}
   .badge.orchestrator{background:#4f46e5;color:#fff}
@@ -40,8 +47,11 @@
   .briefing-btn{background:#1e2235;border:1px solid #374151;color:#a78bfa;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:.82rem;font-weight:600;white-space:nowrap;transition:background .2s}
   .briefing-btn:hover{background:#2d3748}
 
+  /* ── Messages area ── */
+  .messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;min-height:100px}
+
   /* ── Right panel ── */
-  .sidebar{overflow-y:auto;background:#13161f}
+  .sidebar{overflow-y:auto;background:#13161f;width:340px;min-width:180px;flex-shrink:0}
   .panel{border-bottom:1px solid #2d3748;padding:14px}
   .panel h2{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
   .panel h2 button{background:#1e2235;border:1px solid #374151;color:#94a3b8;border-radius:6px;padding:2px 8px;font-size:.7rem;cursor:pointer}
@@ -63,6 +73,10 @@
   .chip:hover{border-color:#7c3aed;color:#a78bfa}
   .spinner{display:inline-block;width:14px;height:14px;border:2px solid #4f46e5;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
   @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes refresh-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+  @keyframes panel-flash{0%{opacity:1}40%{opacity:.3}100%{opacity:1}}
+  .panel-refreshing{animation:panel-flash .5s ease-in-out}
+  .btn-spinning{display:inline-block;animation:refresh-spin .6s linear infinite}
 </style>
 </head>
 <body>
@@ -89,6 +103,8 @@
         <div class="final">Hi! I'm your AI productivity assistant.<br>I can manage tasks, schedule events, and save notes — all from natural language.<br><br>Try an example above or type anything below.</div>
       </div>
     </div>
+    <!-- Horizontal resize handle -->
+    <div class="divider-h" id="dividerH"></div>
     <div class="trace" id="trace">
       <div class="trace-line"><span class="badge orchestrator">system</span><span class="text">Agent trace will appear here in real time...</span></div>
     </div>
@@ -99,8 +115,11 @@
     </div>
   </div>
 
+  <!-- Vertical resize handle -->
+  <div class="divider-v" id="dividerV"></div>
+
   <!-- Sidebar -->
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
     <div class="panel">
       <h2>Tasks <button onclick="refreshAll()">↻</button></h2>
       <div id="tasks-list"><div class="empty">Loading…</div></div>
@@ -121,7 +140,20 @@ const USER_ID = "demo";
 const BASE = "";
 
 async function refreshAll() {
+  // Spin the refresh button
+  const btn = document.querySelector('button[onclick="refreshAll()"]');
+  if (btn) { btn.innerHTML = '<span class="btn-spinning">↻</span>'; btn.disabled = true; }
+
+  // Flash all three panel content areas
+  ["tasks-list","events-list","notes-list"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.remove("panel-refreshing"); void el.offsetWidth; el.classList.add("panel-refreshing"); }
+  });
+
   await Promise.all([loadTasks(), loadEvents(), loadNotes()]);
+
+  // Restore button
+  if (btn) { btn.innerHTML = "↻"; btn.disabled = false; }
 }
 
 async function loadTasks() {
@@ -141,16 +173,40 @@ async function loadTasks() {
     </div>`).join("");
 }
 
+function fmtEvent(iso, mins) {
+  const d = new Date(iso);
+  const day   = d.toLocaleDateString("en-IN", { weekday:"short" });
+  const date  = d.toLocaleDateString("en-IN", { day:"2-digit", month:"short" });
+  const time  = d.toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", hour12:true });
+  const hrs   = Math.floor(mins / 60), rem = mins % 60;
+  const dur   = hrs ? (rem ? `${hrs}h ${rem}m` : `${hrs}h`) : `${mins}m`;
+  return { day, date, time, dur };
+}
+
 async function loadEvents() {
   const r = await fetch(`${BASE}/events?user_id=${USER_ID}`);
   const items = await r.json();
   const el = document.getElementById("events-list");
   if (!items.length) { el.innerHTML = '<div class="empty">No events yet</div>'; return; }
-  el.innerHTML = items.map(e => `
-    <div class="item">
-      <div class="name">${esc(e.name)}</div>
-      <div class="meta">${esc(e.start_time)} · ${e.duration_minutes}min <span style="float:right;color:#374151">#${e.id}</span></div>
-    </div>`).join("");
+  el.innerHTML = items.map(e => {
+    const f = fmtEvent(e.start_time, e.duration_minutes);
+    return `
+    <div class="item" style="display:flex;gap:10px;align-items:center">
+      <div style="background:#2d1b69;border-radius:8px;padding:6px 10px;text-align:center;min-width:46px;flex-shrink:0">
+        <div style="font-size:.6rem;color:#a78bfa;text-transform:uppercase;font-weight:700">${f.day}</div>
+        <div style="font-size:.95rem;font-weight:700;color:#e2e8f0;line-height:1.2">${f.date}</div>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div class="name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.name)}</div>
+        <div class="meta" style="display:flex;gap:6px;align-items:center;margin-top:3px">
+          <span style="color:#a78bfa">⏰</span><span>${f.time}</span>
+          <span style="color:#374151">·</span>
+          <span style="color:#d97706">⏱ ${f.dur}</span>
+          <span style="margin-left:auto;color:#374151">#${e.id}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
 }
 
 async function loadNotes() {
@@ -241,6 +297,72 @@ function sendExample(el) {
   document.getElementById("inp").value = el.textContent;
   send();
 }
+
+// ── Resizable panels ────────────────────────────────────────────────────────
+
+// Vertical divider: resize chat vs sidebar
+(function() {
+  const divider = document.getElementById("dividerV");
+  const sidebar = document.getElementById("sidebar");
+  const layout  = divider.parentElement;
+  let dragging = false, startX = 0, startWidth = 0;
+
+  divider.addEventListener("mousedown", e => {
+    dragging = true;
+    startX = e.clientX;
+    startWidth = sidebar.offsetWidth;
+    divider.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  });
+
+  document.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    const delta = startX - e.clientX;
+    const newWidth = Math.min(Math.max(startWidth + delta, 180), layout.offsetWidth - 300);
+    sidebar.style.width = newWidth + "px";
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    divider.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  });
+})();
+
+// Horizontal divider: resize messages vs trace
+(function() {
+  const divider  = document.getElementById("dividerH");
+  const trace    = document.getElementById("trace");
+  const chat     = trace.closest(".chat");
+  let dragging = false, startY = 0, startHeight = 0;
+
+  divider.addEventListener("mousedown", e => {
+    dragging = true;
+    startY = e.clientY;
+    startHeight = trace.offsetHeight;
+    divider.classList.add("dragging");
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  });
+
+  document.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    const delta = startY - e.clientY;
+    const newHeight = Math.min(Math.max(startHeight + delta, 60), chat.offsetHeight - 120);
+    trace.style.height = newHeight + "px";
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    divider.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  });
+})();
 
 // Init
 refreshAll();

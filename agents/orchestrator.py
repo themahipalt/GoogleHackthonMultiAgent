@@ -12,7 +12,7 @@ Yields SSE-formatted strings for real-time streaming to the browser.
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import AsyncGenerator
 
 from google import genai
@@ -55,7 +55,7 @@ SYSTEM_PROMPT = (
     "- Batch independent tool calls in a single response when possible.\n"
     "- For multi-step workflows (e.g. 'schedule standup AND create prep task'), do both.\n"
     "- After all tools complete, return a concise, friendly summary.\n"
-    f"- Today's date is {datetime.now(timezone.utc).strftime('%A, %Y-%m-%d')} UTC.\n"
+    f"- Today's date and time is {datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime('%A, %Y-%m-%d %I:%M %p')} IST (Asia/Kolkata, UTC+5:30).\n"
 )
 
 _CHAT_CONFIG = genai_types.GenerateContentConfig(
