@@ -161,6 +161,7 @@
 <script>
 const USER_ID = "demo";
 const BASE = "";
+let _requesting = false;
 
 async function refreshAll() {
   // Spin the refresh button
@@ -282,6 +283,8 @@ function addTrace(agent, text) {
 }
 
 async function streamRequest(url) {
+  if (_requesting) return;
+  _requesting = true;
   const sendBtn = document.getElementById("sendBtn");
   const briefBtn = document.getElementById("briefBtn");
   sendBtn.disabled = true; briefBtn.disabled = true;
@@ -302,6 +305,7 @@ async function streamRequest(url) {
     }
     if (data.msg === "✓ Done.") {
       evtSource.close();
+      _requesting = false;
       assistantDiv.innerHTML = `<div class="final">${renderMarkdown(finalText || "Done! Your data has been updated.")}</div>`;
       sendBtn.disabled = false; briefBtn.disabled = false;
       refreshAll();
@@ -310,6 +314,7 @@ async function streamRequest(url) {
   };
   evtSource.onerror = () => {
     evtSource.close();
+    _requesting = false;
     assistantDiv.innerHTML = '<div class="final" style="color:#f87171">Error connecting to server. Is the backend running?</div>';
     sendBtn.disabled = false; briefBtn.disabled = false;
   };
