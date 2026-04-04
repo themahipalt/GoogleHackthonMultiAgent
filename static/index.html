@@ -225,6 +225,20 @@ function esc(s) {
   return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
+function renderMarkdown(s) {
+  let t = esc(s);
+  // bold **text**
+  t = t.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  // italic *text* (not list items)
+  t = t.replace(/(?<![^\n])\*(?!\s)(.+?)\*/g, "<em>$1</em>");
+  // bullet list lines starting with * or -
+  t = t.replace(/(^|\n)[*\-]\s+(.+)/g, "$1<li>$2</li>");
+  t = t.replace(/(<li>.*<\/li>)/s, "<ul>$1</ul>");
+  // newlines to <br> (outside list items)
+  t = t.replace(/\n/g, "<br>");
+  return t;
+}
+
 function appendMessage(role, html) {
   const el = document.getElementById("messages");
   const div = document.createElement("div");
@@ -265,7 +279,7 @@ async function streamRequest(url) {
     }
     if (data.msg === "✓ Done.") {
       evtSource.close();
-      assistantDiv.innerHTML = `<div class="final">${esc(finalText || "Done! Your data has been updated.").replace(/\n/g,"<br>")}</div>`;
+      assistantDiv.innerHTML = `<div class="final">${renderMarkdown(finalText || "Done! Your data has been updated.")}</div>`;
       sendBtn.disabled = false; briefBtn.disabled = false;
       refreshAll();
     }
