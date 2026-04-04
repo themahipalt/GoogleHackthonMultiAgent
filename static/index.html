@@ -84,9 +84,25 @@
   @keyframes panel-flash{0%{opacity:1}40%{opacity:.3}100%{opacity:1}}
   .panel-refreshing{animation:panel-flash .5s ease-in-out}
   .btn-spinning{display:inline-block;animation:refresh-spin .6s linear infinite}
+
+  /* ── Notification toasts ── */
+  #toast-container{position:fixed;top:68px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+  .toast{background:#fff;border:1px solid #ced0d4;border-left:4px solid #1877f2;border-radius:10px;padding:12px 14px;min-width:280px;max-width:340px;box-shadow:0 4px 16px rgba(0,0,0,.12);pointer-events:all;display:flex;gap:10px;align-items:flex-start;animation:toast-in .25s ease}
+  .toast.warning{border-left-color:#f5a623}
+  .toast.urgent{border-left-color:#e02d69}
+  .toast-icon{font-size:1.3rem;flex-shrink:0;line-height:1}
+  .toast-body{flex:1;min-width:0}
+  .toast-title{font-weight:700;font-size:.85rem;color:#1c1e21;margin-bottom:2px}
+  .toast-msg{font-size:.78rem;color:#65676b;line-height:1.4}
+  .toast-close{background:none;border:none;color:#bec3c9;cursor:pointer;font-size:1rem;padding:0;flex-shrink:0;line-height:1}
+  .toast-close:hover{color:#65676b}
+  @keyframes toast-in{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+  @keyframes toast-out{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(20px)}}
 </style>
 </head>
 <body>
+
+<div id="toast-container"></div>
 
 <header>
   <div style="width:36px;height:36px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.2rem;box-shadow:0 1px 3px rgba(0,0,0,.2)">🤖</div>
@@ -289,6 +305,7 @@ async function streamRequest(url) {
       assistantDiv.innerHTML = `<div class="final">${renderMarkdown(finalText || "Done! Your data has been updated.")}</div>`;
       sendBtn.disabled = false; briefBtn.disabled = false;
       refreshAll();
+      checkUpcomingEvents();
     }
   };
   evtSource.onerror = () => {
@@ -387,6 +404,108 @@ function sendExample(el) {
 
 // Init
 refreshAll();
+
+// ── Notification system ──────────────────────────────────────────────────────
+
+const _notified = new Set(); // track event IDs already toasted this session
+
+// ── Notification sound (Web Audio API — no external file needed) ─────────────
+let _audioCtx = null;
+
+function _getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}
+
+function playNotificationSound(urgent = false) {
+  try {
+    const ctx = _getAudioCtx();
+    // Play two chime notes (higher pitch for urgent)
+    const notes = urgent ? [880, 660] : [660, 880];
+    notes.forEach((freq, i) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.4);
+      osc.start(start);
+      osc.stop(start + 0.4);
+    });
+  } catch (_) { /* AudioContext blocked — ignore */ }
+}
+
+function showToast(title, msg, level = "info", durationMs = 8000) {
+  const icons = { info: "📅", warning: "⏰", urgent: "🔔" };
+  const container = document.getElementById("toast-container");
+  const toast = document.createElement("div");
+  toast.className = `toast ${level !== "info" ? level : ""}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[level] || "📅"}</span>
+    <div class="toast-body">
+      <div class="toast-title">${esc(title)}</div>
+      <div class="toast-msg">${esc(msg)}</div>
+    </div>
+    <button class="toast-close" onclick="dismissToast(this)">✕</button>`;
+  container.appendChild(toast);
+
+  // Play chime sound
+  playNotificationSound(level === "urgent");
+
+  // Also fire a browser desktop notification if permission granted
+  if (Notification.permission === "granted") {
+    new Notification(title, { body: msg, icon: "/favicon.ico" });
+  }
+
+  if (durationMs > 0) {
+    setTimeout(() => dismissToast(toast.querySelector(".toast-close")), durationMs);
+  }
+}
+
+function dismissToast(closeBtn) {
+  const toast = closeBtn.closest(".toast");
+  if (!toast) return;
+  toast.style.animation = "toast-out .2s ease forwards";
+  setTimeout(() => toast.remove(), 200);
+}
+
+async function checkUpcomingEvents() {
+  try {
+    const res = await fetch(`${BASE}/events/upcoming?user_id=${USER_ID}&within_minutes=15`);
+    if (!res.ok) return;
+    const events = await res.json();
+    for (const e of events) {
+      if (_notified.has(e.id)) continue;
+      _notified.add(e.id);
+      const mins = e.minutes_away;
+      const level = mins <= 5 ? "urgent" : "warning";
+      const timeLabel = mins === 0 ? "right now" : `in ${mins} minute${mins !== 1 ? "s" : ""}`;
+      showToast(
+        `📅 Upcoming: ${e.name}`,
+        `Starting ${timeLabel}`,
+        level,
+        mins <= 5 ? 0 : 10000   // urgent alerts stay until dismissed
+      );
+    }
+  } catch (_) { /* silent — don't break the app if polling fails */ }
+}
+
+// On first user interaction: unlock AudioContext + request notification permission
+document.addEventListener("click", function unlock() {
+  // Warm up AudioContext so it's ready for later notifications
+  try { _getAudioCtx().resume(); } catch(_) {}
+  if (Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+}, { once: true });
+
+// Poll every 30 seconds; also check immediately on load
+checkUpcomingEvents();
+setInterval(checkUpcomingEvents, 30 * 1000);
 </script>
 </body>
 </html>

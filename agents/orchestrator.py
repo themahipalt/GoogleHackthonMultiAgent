@@ -64,13 +64,20 @@ SYSTEM_PROMPT = (
     "- Always call tools rather than fabricating data.\n"
     "- Batch independent tool calls in a single response when possible.\n"
     "- After all tools complete, return a concise, friendly summary.\n"
-    f"- Today's date and time is {datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime('%A, %Y-%m-%d %I:%M %p')} IST (Asia/Kolkata, UTC+5:30).\n"
 )
 
-_CHAT_CONFIG = genai_types.GenerateContentConfig(
-    system_instruction=SYSTEM_PROMPT,
-    tools=GEMINI_TOOLS,
-)
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _build_config() -> genai_types.GenerateContentConfig:
+    """Build a fresh config with the current IST timestamp on every request."""
+    now_ist = datetime.now(IST).strftime("%A, %Y-%m-%d %I:%M %p")
+    system = SYSTEM_PROMPT + f"- Current date and time: {now_ist} IST (Asia/Kolkata, UTC+5:30).\n"
+    return genai_types.GenerateContentConfig(
+        system_instruction=system,
+        tools=GEMINI_TOOLS,
+    )
 
 
 async def run(message: str, user_id: str) -> AsyncGenerator[str, None]:
@@ -78,7 +85,7 @@ async def run(message: str, user_id: str) -> AsyncGenerator[str, None]:
     Agentic loop — yields SSE strings.
     Each payload: {"agent": str, "msg": str, "ts": float}
     """
-    chat = _get_client().chats.create(model=MODEL, config=_CHAT_CONFIG)
+    chat = _get_client().chats.create(model=MODEL, config=_build_config())
     yield _sse("orchestrator", f"Processing: {message}")
 
     response = chat.send_message(message)
