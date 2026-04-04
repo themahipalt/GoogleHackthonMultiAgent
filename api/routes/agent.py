@@ -16,8 +16,11 @@ router = APIRouter(tags=["agent"])
 
 _SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 _DAILY_BRIEFING_MSG = (
-    "Give me a daily briefing: list my pending tasks and today's calendar events. "
-    "Summarize them clearly."
+    "Give me a daily briefing. "
+    "1) Call task_list to get all pending tasks. "
+    "2) Call calendar_list_events to get today's calendar events. "
+    "Then summarize both clearly. "
+    "Note: tasks and calendar events are separate — list both even if one is empty."
 )
 
 

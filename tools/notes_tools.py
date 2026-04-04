@@ -25,8 +25,16 @@ SCHEMAS = [
         },
     },
     {
+        "name": "notes_list",
+        "description": "List all notes for the user. Use this when the user asks to see, show, or list their notes without a specific search keyword.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
         "name": "notes_search",
-        "description": "Search notes by keyword (matches title, body, or tags).",
+        "description": "Search notes by keyword (matches title, body, or tags). Use this only when a specific keyword is provided.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -65,6 +73,14 @@ def create(inp: dict, user_id: str) -> dict:
             "source": "firestore"}
 
 
+def list_notes(inp: dict, user_id: str) -> dict:
+    db = get_db()
+    docs = db.collection(NOTES).where("user_id", "==", user_id).stream()
+    notes = [{"id": d.id, **d.to_dict()} for d in docs]
+    notes.sort(key=lambda n: n.get("created_at", ""), reverse=True)
+    return {"notes": notes, "count": len(notes)}
+
+
 def search(inp: dict, user_id: str) -> dict:
     # Firestore has no native full-text search. We fetch all of the user's
     # notes and do a case-insensitive substring match across title, body, and
@@ -94,6 +110,7 @@ def delete(inp: dict, user_id: str) -> dict:
 # ── Dispatch map ──────────────────────────────────────────────────────────────
 HANDLERS = {
     "notes_create": create,
+    "notes_list":   list_notes,
     "notes_search": search,
     "notes_delete": delete,
 }
