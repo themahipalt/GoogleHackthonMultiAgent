@@ -210,3 +210,8 @@ __pycache__/
 .DS_Store
 .env
 service-account.json
+# Claude Code local settings
+.claude/settings.local.json
+
+# macOS
+.DS_Store
