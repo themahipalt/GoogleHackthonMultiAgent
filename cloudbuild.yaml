@@ -1,46 +1,17 @@
-# Google Cloud Build — builds + deploys to Cloud Run in one command:
-#   gcloud builds submit --config cloudbuild.yaml
-
-substitutions:
-  _REGION:   us-central1
-  _SERVICE:  agent-assistant
-  _IMAGE:    gcr.io/$PROJECT_ID/${_SERVICE}
-
 steps:
-  # 1. Build the container image
-  - name: gcr.io/cloud-builders/docker
-    args:
-      - build
-      - -t
-      - ${_IMAGE}:$SHORT_SHA
-      - -t
-      - ${_IMAGE}:latest
-      - .
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build',
+      '-t',
+      'us-central1-docker.pkg.dev/himahi/agent-repo/agent-assistant:latest',
+      '.'
+    ]
 
-  # 2. Push to Google Container Registry
-  - name: gcr.io/cloud-builders/docker
-    args:
-      - push
-      - --all-tags
-      - ${_IMAGE}
-
-  # 3. Deploy to Cloud Run
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    entrypoint: gcloud
-    args:
-      - run
-      - deploy
-      - ${_SERVICE}
-      - --image=${_IMAGE}:$SHORT_SHA
-      - --region=${_REGION}
-      - --platform=managed
-      - --allow-unauthenticated
-      - --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID
-      - --set-secrets=GOOGLE_API_KEY=GOOGLE_API_KEY:latest
-      - --memory=512Mi
-      - --cpu=1
-      - --max-instances=10
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'push',
+      'us-central1-docker.pkg.dev/himahi/agent-repo/agent-assistant:latest'
+    ]
 
 images:
-  - ${_IMAGE}:$SHORT_SHA
-  - ${_IMAGE}:latest
+  - 'us-central1-docker.pkg.dev/himahi/agent-repo/agent-assistant:latest'

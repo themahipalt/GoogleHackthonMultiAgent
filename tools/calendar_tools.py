@@ -19,6 +19,8 @@ from datetime import datetime, timedelta, timezone
 from auth import get_calendar_service
 from db import get_db, EVENTS
 
+IST = timezone(timedelta(hours=5, minutes=30))
+
 CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "primary")
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -129,8 +131,8 @@ def _gcal_list(svc, inp: dict) -> dict:
     # that day. When no day is given, show everything from now onward (no upper
     # bound) so users see all upcoming events.
     if date_prefix:
-        time_min = f"{date_prefix}T00:00:00Z"
-        time_max = f"{date_prefix}T23:59:59Z"
+        time_min = f"{date_prefix}T00:00:00+05:30"
+        time_max = f"{date_prefix}T23:59:59+05:30"
     else:
         time_min = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         time_max = None
@@ -212,7 +214,7 @@ def _resolve_date(day_str: str) -> str | None:
     if not day_str:
         return None
     s = day_str.strip().lower()
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(IST).date()
     if s == "today":
         return str(today)
     if s == "tomorrow":
