@@ -77,6 +77,10 @@ def _build_config() -> genai_types.GenerateContentConfig:
     return genai_types.GenerateContentConfig(
         system_instruction=system,
         tools=GEMINI_TOOLS,
+        # Disable thinking mode — Gemini 2.5 Flash with thinking enabled
+        # consumes tool results in thought parts and emits no final text,
+        # leaving the user with an empty response.
+        thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
     )
 
 
@@ -106,9 +110,11 @@ async def run(message: str, user_id: str) -> AsyncGenerator[str, None]:
         parts = content.parts if content else None
         import sys
         print(f"[DEBUG hop={hop}] finish={candidate.finish_reason} content={content} parts={parts}", file=sys.stderr, flush=True)
-        if not parts:
-            # Gemini 2.5 Flash thinking model may return empty parts on final STOP
-            # Try response.text as fallback
+        # Filter out thought parts — only keep real answer/function-call parts
+        real_parts = [p for p in parts if not getattr(p, "thought", False)] if parts else []
+        if not real_parts:
+            # Gemini 2.5 Flash thinking model may return only thought parts or
+            # empty parts on final STOP. Try response.text as fallback.
             try:
                 text = response.text
                 if text:
@@ -116,10 +122,13 @@ async def run(message: str, user_id: str) -> AsyncGenerator[str, None]:
             except Exception:
                 yield _sse("orchestrator", f"Empty response (finish_reason={candidate.finish_reason})")
             break
+        parts = real_parts
 
         function_calls = []
         for part in parts:
-            if part.text:
+            # Skip thought parts — these are Gemini's internal reasoning and
+            # should not be shown to the user as a final response.
+            if part.text and not getattr(part, "thought", False):
                 yield _sse("orchestrator", part.text)
             if part.function_call:
                 function_calls.append(part.function_call)
@@ -129,6 +138,7 @@ async def run(message: str, user_id: str) -> AsyncGenerator[str, None]:
 
         # ── Execute each tool call ────────────────────────────────────────────
         response_parts = []
+        last_tool_results = []
         for fc in function_calls:
             agent_label = _agent_label(fc.name)
             args = dict(fc.args)
@@ -138,6 +148,7 @@ async def run(message: str, user_id: str) -> AsyncGenerator[str, None]:
 
             yield _sse(agent_label, json.dumps(result)[:200])
             _persist_log(user_id, agent_label, fc.name, result)
+            last_tool_results.append((fc.name, result))
 
             response_parts.append(
                 genai_types.Part.from_function_response(
@@ -151,6 +162,29 @@ async def run(message: str, user_id: str) -> AsyncGenerator[str, None]:
         # reason over parallel tool results at once before the next hop.
         response = chat.send_message(response_parts)
 
+        # ── Check if Gemini returned empty response after tool call ───────────
+        # Gemini 2.5 Flash thinking model sometimes processes the result
+        # internally (in thought parts) without emitting final text. When that
+        # happens, synthesize a readable summary from the tool results so the
+        # user sees real data instead of a generic fallback message.
+        _candidates = response.candidates or []
+        if _candidates:
+            _content = _candidates[0].content
+            _parts = _content.parts if _content else None
+            # Exclude thought parts — only real answer text counts
+            _has_text = any(p.text and not getattr(p, "thought", False) for p in _parts) if _parts else False
+            _has_fn = any(p.function_call for p in _parts) if _parts else False
+            if not _has_text and not _has_fn:
+                try:
+                    _text = response.text
+                except Exception:
+                    _text = ""
+                if not _text:
+                    _text = _synthesize_summary(last_tool_results)
+                if _text:
+                    yield _sse("orchestrator", _text)
+                break
+
     yield _sse("orchestrator", "✓ Done.")
 
 
@@ -159,6 +193,51 @@ async def run(message: str, user_id: str) -> AsyncGenerator[str, None]:
 def _sse(agent: str, msg: str) -> str:
     payload = json.dumps({"agent": agent, "msg": msg, "ts": time.time()})
     return f"data: {payload}\n\n"
+
+
+def _synthesize_summary(tool_results: list[tuple[str, dict]]) -> str:
+    """Build a human-readable summary from tool results when Gemini returns no text."""
+    lines = []
+    for tool_name, result in tool_results:
+        if "events" in result:
+            events = result["events"]
+            day_filter = result.get("filter", "")
+            label = f"today ({day_filter})" if day_filter else "upcoming"
+            if not events:
+                lines.append(f"No events found for {label}.")
+            else:
+                lines.append(f"Here are your events for {label}:")
+                for e in events:
+                    start = e.get("start_time", "")
+                    name = e.get("name", e.get("summary", ""))
+                    if start:
+                        # Format: "2026-04-05T09:00:00" → "09:00"
+                        time_part = start[11:16] if len(start) > 10 else start
+                        lines.append(f"- **{name}** at {time_part}")
+                    else:
+                        lines.append(f"- **{name}**")
+        elif "tasks" in result:
+            tasks = result["tasks"]
+            if not tasks:
+                lines.append("No tasks found.")
+            else:
+                lines.append(f"You have {len(tasks)} task(s):")
+                for t in tasks[:10]:
+                    status = t.get("status", "")
+                    name = t.get("name", "")
+                    due = t.get("due_date", "")
+                    status_icon = "✅" if status == "done" else "⬜"
+                    lines.append(f"- {status_icon} **{name}**" + (f" (due {due})" if due else ""))
+        elif result.get("created"):
+            name = result.get("name", "")
+            lines.append(f"✓ Created: **{name}**")
+        elif result.get("updated"):
+            lines.append(f"✓ Task updated.")
+        elif result.get("deleted"):
+            lines.append(f"✓ Deleted successfully.")
+        elif result.get("error"):
+            lines.append(f"⚠️ {result['error']}")
+    return "\n".join(lines)
 
 
 def _agent_label(tool_name: str) -> str:

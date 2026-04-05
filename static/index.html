@@ -117,8 +117,6 @@
     <div class="examples" id="examples">
       <span class="chip" onclick="sendExample(this)">Schedule standup tomorrow 9am + create prep task</span>
       <span class="chip" onclick="sendExample(this)">What tasks do I have pending?</span>
-      <span class="chip" onclick="sendExample(this)">Save a note about project ideas</span>
-      <span class="chip" onclick="sendExample(this)">Mark task 1 as done</span>
       <span class="chip" onclick="sendExample(this)">What's on my calendar today?</span>
     </div>
     <div class="messages" id="messages">
@@ -306,7 +304,7 @@ async function streamRequest(url) {
     if (data.msg === "✓ Done.") {
       evtSource.close();
       _requesting = false;
-      assistantDiv.innerHTML = `<div class="final">${renderMarkdown(finalText || "Done! Your data has been updated.")}</div>`;
+      assistantDiv.innerHTML = `<div class="final">${renderMarkdown(finalText || "Done.")}</div>`;
       sendBtn.disabled = false; briefBtn.disabled = false;
       refreshAll();
       checkUpcomingEvents();
